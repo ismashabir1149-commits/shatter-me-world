@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shatter Me: World</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #050a12;
+      color: white;
+      overflow: hidden;
+    }
+    #game {
+      display: block;
+      margin: 0 auto;
+      background: #091018;
+      border: 3px solid #7c9cff;
+      box-shadow: 0 0 30px rgba(124, 156, 255, .3);
+    }
+    #hud {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      width: 340px;
+      background: rgba(12, 17, 28, 0.9);
+      border: 2px solid #7c9cff;
+      border-radius: 8px;
+      padding: 18px;
+      z-index: 20;
+    }
+    #hud h1 {
+      margin: 0 0 10px;
+      color: #ff7a93;
+      font-size: 28px;
+    }
+    #hud p {
+      margin: 0;
+      color: #dfe9ff;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    #landmark {
+      display: none;
+      margin-top: 18px;
+      padding: 12px;
+      background: rgba(92, 124, 184, 0.15);
+      border-left: 3px solid #7c9cff;
+      border-radius: 4px;
+    }
+    #landmark h2 {
+      margin: 0 0 8px;
+      color: #ff9bb1;
+      font-size: 16px;
+    }
+    #landmark p {
+      font-size: 12px;
+      color: #dce9ff;
+    }
+    #controls {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(12, 17, 28, 0.9);
+      border: 2px solid #7c9cff;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: #dfe9ff;
+      z-index: 20;
+    }
+    #stats {
+      position: fixed;
+      right: 20px;
+      top: 20px;
+      background: rgba(12, 17, 28, 0.9);
+      border: 2px solid #7c9cff;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: #dfe9ff;
+      z-index: 20;
+    }
+    strong { color: #8ab0ff; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <h1>Shatter Me</h1>
+    <p>Explore a fractured world of memory, fear, and rebellion.</p>
+    <p id="pos">Position: (2.5, 2.5)</p>
+    <div id="landmark">
+      <h2 id="name">Location</h2>
+      <p id="desc">Description</p>
+      <p id="hint">Hint</p>
+    </div>
+  </div>
+
+  <div id="stats">
+    <div>Locations found: <strong id="count">0/4</strong></div>
+  </div>
+
+  <div id="controls">
+    <strong>WASD</strong> or <strong>Arrow Keys</strong> - Move<br>
+    <strong>E</strong> - Inspect landmark
+  </div>
+
+  <canvas id="game" width="1000" height="700"></canvas>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const tile = 40;
+
+    const map = [
+      "############################",
+      "#....G.............#.......#",
+      "#.######.#####.#.#.###.#..#",
+      "#......#...#...#...#...#..#",
+      "#.##.#.#.#.#.###.#.#.#....#",
+      "#....#...#.#...#...#.#.##.#",
+      "#.##.###.#.###.#.###.#....#",
+      "#....#...#...#...#...#.#..#",
+      "#.##.#.###.#.###.###.#.#..#",
+      "#....#...#...#...#...#....#",
+      "#.####.###.#.#.#.###.##.#.#",
+      "#....#...#.#.#...#.....#..#",
+      "#.##.#.#.#.#.###.####.#..#",
+      "#...#.#.#...#...#....#....#",
+      "#.###.#.###.###.#.##.#.##.#",
+      "#.R..............#........#",
+      "#.###.#####.#.#.#.###.#..#",
+      "#.....#...#.#.#...#...#..#",
+      "#.###.#.#.#.#.###.#.###..#",
+      "#...#.#.#...#...#.#...#..#",
+      "#.#.#.#.###.###.#.###.#..#",
+      "#.#...#.....#...#...#....#",
+      "#.#####.###.#.###.#.###..#",
+      "#.......B....#....S......#",
+      "############################"
+    ];
+
+    const landmarks = {
+      G: {
+        name: "The Glass Citadel",
+        description: "A crystal tower of memory and silence.",
+        hint: "It reflects the fear and sorrow of the world."
+      },
+      R: {
+        name: "The Red Wastes",
+        description: "A scarred region of ash and ruined horizons.",
+        hint: "Every breath here feels like a warning."
+      },
+      B: {
+        name: "The Bell Tower",
+        description: "A broken spire that rings through the night.",
+        hint: "The sound seems to travel through everything."
+      },
+      S: {
+        name: "The Shadow Gate",
+        description: "A threshold of whispers and impossible power.",
+        hint: "Reality bends around it."
+      }
+    };
+
+    let playerX = 2.5;
+    let playerY = 2.5;
+    const keys = {};
+    let nearby = null;
+    const visited = new Set();
+
+    function isWall(x, y) {
+      const tx = Math.floor(x);
+      const ty = Math.floor(y);
+      if (tx < 0 || ty < 0 || tx >= map[0].length || ty >= map.length) return true;
+      return map[ty][tx] === '#';
+    }
+
+    function getLandmark(x, y) {
+      const tx = Math.round(x);
+      const ty = Math.round(y);
+      if (tx < 0 || ty < 0 || tx >= map[0].length || ty >= map.length) return null;
+      const ch = map[ty][tx];
+      return ch in landmarks ? ch : null;
+    }
+
+    window.addEventListener('keydown', (e) => {
+      const key = e.key.toLowerCase();
+      keys[key] = true;
+
+      if (e.key === 'e' || e.key === 'E') {
+        if (nearby) {
+          visited.add(nearby);
+          document.getElementById('count').textContent = `${visited.size}/4`;
+          const data = landmarks[nearby];
+          alert(`${data.name}\n\n${data.description}\n\n${data.hint}`);
+        }
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      keys[e.key.toLowerCase()] = false;
+    });
+
+    function update() {
+      let dx = 0;
+      let dy = 0;
+
+      if (keys['w'] || keys['arrowup']) dy -= 0.12;
+      if (keys['s'] || keys['arrowdown']) dy += 0.12;
+      if (keys['a'] || keys['arrowleft']) dx -= 0.12;
+      if (keys['d'] || keys['arrowright']) dx += 0.12;
+
+      const nextX = playerX + dx;
+      const nextY = playerY + dy;
+
+      if (!isWall(nextX, playerY)) playerX = nextX;
+      if (!isWall(playerX, nextY)) playerY = nextY;
+
+      nearby = getLandmark(playerX, playerY);
+
+      const posEl = document.getElementById('pos');
+      posEl.textContent = `Position: (${playerX.toFixed(1)}, ${playerY.toFixed(1)})`;
+
+      const landmarkEl = document.getElementById('landmark');
+      if (nearby) {
+        const data = landmarks[nearby];
+        document.getElementById('name').textContent = data.name;
+        document.getElementById('desc').textContent = data.description;
+        document.getElementById('hint').textContent = data.hint;
+        landmarkEl.style.display = 'block';
+      } else {
+        landmarkEl.style.display = 'none';
+      }
+    }
+
+    function draw() {
+      ctx.fillStyle = '#091018';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (let y = 0; y < map.length; y++) {
+        for (let x = 0; x < map[0].length; x++) {
+          const cell = map[y][x];
+          const px = x * tile;
+          const py = y * tile;
+
+          if (cell === '#') {
+            ctx.fillStyle = '#1e2637';
+            ctx.fillRect(px, py, tile, tile);
+          } else {
+            ctx.fillStyle = '#0a0f1b';
+            ctx.fillRect(px, py, tile, tile);
+          }
+
+          if (cell in landmarks) {
+            ctx.fillStyle = 'rgba(115, 145, 255, 0.25)';
+            ctx.fillRect(px + 2, py + 2, tile - 4, tile - 4);
+            ctx.strokeStyle = '#7c9cff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(px + 2, py + 2, tile - 4, tile - 4);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(cell, px + tile / 2, py + tile / 2);
+          }
+        }
+      }
+
+      const px = playerX * tile + tile / 2;
+      const py = playerY * tile + tile / 2;
+
+      ctx.beginPath();
+      ctx.fillStyle = '#ff6b87';
+      ctx.arc(px, py, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      requestAnimationFrame(draw);
+    }
+
+    setInterval(update, 16);
+    draw();
+  </script>
+</body>
+</html>
